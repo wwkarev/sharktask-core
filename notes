@@ -1,0 +1,10 @@
+create table sht_project (id serial PRIMARY KEY, key varchar(64) unique, name varchar(256));
+create table sht_task_type (id serial primary key, name varchar(256));
+
+create table sht_field (id serial primary key, name varchar(256));
+create table sht_status (id serial primary key, name varchar(256));
+create table sht_user (id serial primary key, key varchar(64) unique, first_name varchar(256), last_name varchar(256), full_name varchar(256));
+
+create table sht_task (id serial PRIMARY KEY, project_id bigint, task_type_id bigint, status_id bigint, summary varchar(1024), creator_id bigint, assignee_id bigint, created timestamptz, FOREIGN KEY (project_id) REFERENCES sht_project(id), FOREIGN KEY (task_type_id) REFERENCES sht_task_type(id), FOREIGN KEY (status_id) REFERENCES sht_status(id), FOREIGN KEY (creator_id) REFERENCES sht_user(id), FOREIGN KEY (assignee_id) REFERENCES sht_user(id));
+
+create table  sht_fieldvalue (id serial, task_id bigint, field_id bigint, numbervalue double precision, textvalue text, datevalue timestamptz, FOREIGN KEY (task_id) REFERENCES sht_task(id), FOREIGN KEY (field_id) REFERENCES sht_field(id));
