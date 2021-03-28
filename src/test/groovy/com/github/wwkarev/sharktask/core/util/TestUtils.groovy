@@ -1,18 +1,21 @@
 package com.github.wwkarev.sharktask.core.util
 
 import com.github.wwkarev.sharktask.core.field.Field
+import com.github.wwkarev.sharktask.core.field.FieldManager
+import com.github.wwkarev.sharktask.core.field.FieldType
+import com.github.wwkarev.sharktask.core.params.ParamId
+import com.github.wwkarev.sharktask.core.params.Params
 import com.github.wwkarev.sharktask.core.project.Project
+import com.github.wwkarev.sharktask.core.project.ProjectManager
 import com.github.wwkarev.sharktask.core.status.Status
-import com.github.wwkarev.sharktask.core.tasktype.TaskType
-import com.github.wwkarev.sharktask.core.user.User
-import com.github.wwkarev.sharktask.core.config.DBTableNames
-import com.github.wwkarev.sharktask.core.field.FieldCreator
-import com.github.wwkarev.sharktask.core.project.ProjectCreator
-import com.github.wwkarev.sharktask.core.status.StatusCreator
-import com.github.wwkarev.sharktask.core.task.MockTaskCreator
+import com.github.wwkarev.sharktask.core.status.StatusManager
 import com.github.wwkarev.sharktask.core.task.MutableTask
-import com.github.wwkarev.sharktask.core.tasktype.TaskTypeCreator
-import com.github.wwkarev.sharktask.core.user.UserCreator
+import com.github.wwkarev.sharktask.core.task.TaskManager
+import com.github.wwkarev.sharktask.core.tasktype.TaskType
+import com.github.wwkarev.sharktask.core.tasktype.TaskTypeManager
+import com.github.wwkarev.sharktask.core.user.User
+import com.github.wwkarev.sharktask.core.config.Config
+import com.github.wwkarev.sharktask.core.user.UserManager
 import groovy.sql.Sql
 
 class TestUtils {
@@ -35,6 +38,7 @@ class TestUtils {
     static void compare(Field a, Field b) {
         assert a.getId() == b.getId()
         assert a.getName() == b.getName()
+        assert a.getType() == b.getType()
     }
 
     static void compare(User a, User b) {
@@ -45,7 +49,7 @@ class TestUtils {
         assert a.getFullName() == b.getFullName()
     }
 
-    static void clearDB(Sql sql, DBTableNames dbTableNames) {
+    static void clearDB(Sql sql, Config dbTableNames) {
         [
                 dbTableNames.getTaskTable(),
                 dbTableNames.getProjectTable(),
@@ -56,51 +60,48 @@ class TestUtils {
         }
     }
 
-    static Project createProject(Sql sql, DBTableNames dbTableNames) {
-        return ProjectCreator.getInstance(sql, dbTableNames, UUID.randomUUID().toString(), UUID.randomUUID().toString()).create()
+    static Project createProject(Sql sql, Config dbTableNames) {
+        return ProjectManager.newInstance(sql, dbTableNames).create(UUID.randomUUID().toString(), UUID.randomUUID().toString())
     }
 
-    static TaskType createTaskType(Sql sql, DBTableNames dbTableNames) {
-        return TaskTypeCreator.getInstance(sql, dbTableNames, UUID.randomUUID().toString()).create()
+    static TaskType createTaskType(Sql sql, Config dbTableNames) {
+        return TaskTypeManager.newInstance(sql, dbTableNames).create(UUID.randomUUID().toString())
     }
 
-    static Status createStatus(Sql sql, DBTableNames dbTableNames) {
-        return StatusCreator.getInstance(sql, dbTableNames, UUID.randomUUID().toString()).create()
+    static Status createStatus(Sql sql, Config dbTableNames) {
+        return StatusManager.newInstance(sql, dbTableNames).create(UUID.randomUUID().toString())
     }
 
-    static Field createField(Sql sql, DBTableNames dbTableNames, String fieldValueType) {
-        return FieldCreator.getInstance(sql, dbTableNames, UUID.randomUUID().toString(), fieldValueType).create()
+    static Field createField(Sql sql, Config models, FieldType fieldType) {
+        Params params = new Params()
+        params.add(ParamId.FIELD_TYPE, fieldType)
+        return FieldManager.newInstance(sql, models).create(UUID.randomUUID().toString(), params)
     }
 
-    static User createUser(Sql sql, DBTableNames dbTableNames) {
-        return UserCreator.getInstance(
-                sql, dbTableNames,
-                UUID.randomUUID().toString(),
-                UUID.randomUUID().toString(),
-                UUID.randomUUID().toString(),
-                UUID.randomUUID().toString())
-                .create()
+    static User createUser(Sql sql, Config dbTableNames) {
+        return UserManager
+                .newInstance(sql, dbTableNames)
+                .create(
+                        UUID.randomUUID().toString(),
+                        UUID.randomUUID().toString(),
+                        UUID.randomUUID().toString(),
+                        UUID.randomUUID().toString()
+                )
     }
 
-    static MutableTask createTask(Sql sql, DBTableNames dbTableNames) {
-        Project project = TestUtils.createProject(sql, dbTableNames)
-        TaskType taskType = TestUtils.createTaskType(sql, dbTableNames)
-        Status status = TestUtils.createStatus(sql, dbTableNames)
-        User creator = TestUtils.createUser(sql, dbTableNames)
-        User assignee = TestUtils.createUser(sql, dbTableNames)
-        String summary = UUID.randomUUID().toString()
-        Date created = new Date()
+    static MutableTask createTask(Sql sql, Config config) {
+        Project project = TestUtils.createProject(sql, config)
+        TaskType taskType = TestUtils.createTaskType(sql, config)
+        Status status = TestUtils.createStatus(sql, config)
+        User creator = TestUtils.createUser(sql, config)
 
-        MockTaskCreator taskCreator = MockTaskCreator.getInstance(
-                sql, dbTableNames,
-                project.getId(),
-                taskType.getId(),
-                status.getId(),
-                summary,
-                creator.getId(),
-                assignee.getId(),
-                created
-        )
-        return taskCreator.create()
+        Params params = new Params()
+        params.add(ParamId.SUMMARY, UUID.randomUUID().toString())
+        params.add(ParamId.STATUS, status.getId())
+        params.add(ParamId.CREATOR, creator.getKey())
+
+        return TaskManager
+                .newInstance(sql, config)
+                .create(project.getId(), taskType.getId(), params)
     }
 }

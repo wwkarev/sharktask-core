@@ -1,37 +1,49 @@
 package com.github.wwkarev.sharktask.core.project
 
+import com.github.wwkarev.gorm.Select
+import com.github.wwkarev.gorm.exceptions.RecordNotFoundException
 import com.github.wwkarev.sharktask.api.project.ProjectAccessor as API_ProjectAccessor
-import com.github.wwkarev.sharktask.core.config.DBTableNames
+import com.github.wwkarev.sharktask.api.project.ProjectNotFoundException
+import com.github.wwkarev.sharktask.core.config.Config
 import groovy.sql.Sql
 
-final class ProjectAccessor implements API_ProjectAccessor {
-    private Sql sql
-    private DBTableNames dbTableNames
-
-    private ProjectAccessor(Sql sql, DBTableNames dbTableNames) {
-        this.sql = sql
-        this.dbTableNames = dbTableNames
-    }
-
-    static ProjectAccessor getInstance(Sql sql, DBTableNames dbTable) {
-        return new ProjectAccessor(sql, dbTable)
-    }
+trait ProjectAccessor implements API_ProjectAccessor {
+    abstract Sql getSql()
+    abstract Config getConfig()
 
     @Override
     Project getById(Long id) {
-        def rowResult = sql.rows(
-                "select * from ${dbTableNames.getProjectTable()} where id = ?".toString(),
-                [id]
-        )[0]
-        return new Project(rowResult.id, rowResult.key, rowResult.name)
+        try {
+            return new Project(Select.get(getSql(), getConfig().getProjectModel(), 'id', id))
+        } catch(RecordNotFoundException e) {
+            throw new ProjectNotFoundException()
+        }
     }
 
     @Override
     Project getByKey(String key) {
-        def rowResult = sql.rows(
-                "select * from ${dbTableNames.getProjectTable()} where key = ?".toString(),
-                [key]
-        )[0]
-        return new Project(rowResult.id, rowResult.key, rowResult.name)
+        try {
+            return new Project(Select.get(getSql(), getConfig().getProjectModel(), 'key', key))
+        } catch(RecordNotFoundException e) {
+            throw new ProjectNotFoundException()
+        }
+    }
+
+    @Override
+    Project getAtById(Long id) {
+        try {
+            return new Project(Select.get(getSql(), getConfig().getProjectModel(), 'id', id))
+        } catch(RecordNotFoundException e) {
+            return null
+        }
+    }
+
+    @Override
+    Project getAtByKey(String key) {
+        try {
+            return new Project(Select.get(getSql(), getConfig().getProjectModel(), 'key', key))
+        } catch(RecordNotFoundException e) {
+            return null
+        }
     }
 }

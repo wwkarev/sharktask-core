@@ -1,37 +1,49 @@
 package com.github.wwkarev.sharktask.core.user
 
+import com.github.wwkarev.gorm.Select
+import com.github.wwkarev.gorm.exceptions.RecordNotFoundException
 import com.github.wwkarev.sharktask.api.user.UserAccessor as API_UserAccessor
-import com.github.wwkarev.sharktask.core.config.DBTableNames
+import com.github.wwkarev.sharktask.api.user.UserNotFoundException
+import com.github.wwkarev.sharktask.core.config.Config
 import groovy.sql.Sql
 
-class UserAccessor implements API_UserAccessor {
-    private Sql sql
-    private DBTableNames dbTableNames
-
-    private UserAccessor(Sql sql, DBTableNames dbTableNames) {
-        this.sql = sql
-        this.dbTableNames = dbTableNames
-    }
-
-    static UserAccessor getInstance(Sql sql, DBTableNames dbTable) {
-        return new UserAccessor(sql, dbTable)
-    }
+trait UserAccessor implements API_UserAccessor {
+    abstract Sql getSql()
+    abstract Config getConfig()
 
     @Override
     User getById(Long id) {
-        def rowResult = sql.rows(
-                "select * from ${dbTableNames.getUserTable()} where id = ?".toString(),
-                [id]
-        )[0]
-        return new User(rowResult.id, rowResult.key, rowResult.first_name, rowResult.last_name, rowResult.full_name)
+        try {
+            return new User(Select.get(getSql(), getConfig().getUserModel(), 'id', id))
+        } catch(RecordNotFoundException e) {
+            throw new UserNotFoundException()
+        }
     }
 
     @Override
     User getByKey(String key) {
-        def rowResult = sql.rows(
-                "select * from ${dbTableNames.getUserTable()} where key = ?".toString(),
-                [key]
-        )[0]
-        return new User(rowResult.id, rowResult.key, rowResult.first_name, rowResult.last_name, rowResult.full_name)
+        try {
+            return new User(Select.get(getSql(), getConfig().getUserModel(), 'key', key))
+        } catch(RecordNotFoundException e) {
+            throw new UserNotFoundException()
+        }
+    }
+
+    @Override
+    User getAtById(Long id) {
+        try {
+            return new User(Select.get(getSql(), getConfig().getUserModel(), 'id', id))
+        } catch(RecordNotFoundException e) {
+            return null
+        }
+    }
+
+    @Override
+    User getAtByKey(String key) {
+        try {
+            return new User(Select.get(getSql(), getConfig().getUserModel(), 'key', key))
+        } catch(RecordNotFoundException e) {
+            return null
+        }
     }
 }

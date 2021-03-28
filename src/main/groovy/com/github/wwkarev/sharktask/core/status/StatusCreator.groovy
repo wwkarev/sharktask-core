@@ -1,30 +1,30 @@
 package com.github.wwkarev.sharktask.core.status
 
+import com.github.wwkarev.sharktask.api.params.Params
 import com.github.wwkarev.sharktask.api.status.StatusCreator as API_StatusCreator
-import com.github.wwkarev.sharktask.core.config.DBTableNames
+import com.github.wwkarev.sharktask.core.config.Config
+import com.github.wwkarev.sharktask.core.models.StatusModel
 import groovy.sql.Sql
 
-class StatusCreator implements API_StatusCreator {
-    private Sql sql
-    private DBTableNames dbTableNames
-    private String name
+trait StatusCreator implements API_StatusCreator {
+    abstract Sql getSql()
+    abstract Config getConfig()
 
-    private StatusCreator(Sql sql, DBTableNames dbTableNames, String name) {
-        this.sql = sql
-        this.dbTableNames = dbTableNames
-        this.name = name
-    }
-
-    static StatusCreator getInstance(Sql sql, DBTableNames dbTableNames, String name) {
-        return new StatusCreator(sql, dbTableNames, name)
+    @Override
+    Status create(Long id, String name, Params params = null) {
+        return _create(id, name, params)
     }
 
     @Override
-    Status create() {
-        Long id = sql.executeInsert(
-                "insert into ${dbTableNames.getStatusTable()} (name) VALUES(?)".toString(),
-                [name]
-        )[0][0]
-        return new Status(id, name)
+    Status create(String name, Params params = null) {
+        return _create(null, name, params)
+    }
+
+    private Status _create(Long id, String name, Params params) {
+        StatusModel statusModel = getConfig().getStatusModel()
+                .getDeclaredConstructor(Sql, Long, String)
+                .newInstance(getSql(), id, name)
+                .insert()
+        return new Status(statusModel)
     }
 }

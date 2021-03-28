@@ -1,114 +1,88 @@
 package com.github.wwkarev.sharktask.core.task
 
+import com.github.wwkarev.gorm.Q
+import com.github.wwkarev.gorm.Select
+import com.github.wwkarev.gorm.exceptions.RecordNotFoundException
 import com.github.wwkarev.sharktask.api.attachment.Attachment as API_Attachment
 import com.github.wwkarev.sharktask.api.comment.Comment as API_Comment
-import com.github.wwkarev.sharktask.api.project.Project
-import com.github.wwkarev.sharktask.api.project.Project as API_Project
-import com.github.wwkarev.sharktask.api.status.Status
-import com.github.wwkarev.sharktask.api.status.Status as API_Status
 import com.github.wwkarev.sharktask.api.task.Task as API_Task
-import com.github.wwkarev.sharktask.api.tasktype.TaskType
-import com.github.wwkarev.sharktask.api.tasktype.TaskType as API_TaskType
-import com.github.wwkarev.sharktask.api.user.User
 import com.github.wwkarev.sharktask.api.user.User as API_User
-import com.github.wwkarev.sharktask.core.config.DBTableNames
+import com.github.wwkarev.sharktask.core.attachment.Attachment
+import com.github.wwkarev.sharktask.core.config.Config
 import com.github.wwkarev.sharktask.core.exception.MethodNotImplementedException
-import com.github.wwkarev.sharktask.core.field.Field
-import com.github.wwkarev.sharktask.core.field.FieldAccessor
-import groovy.sql.GroovyRowResult
+import com.github.wwkarev.sharktask.core.field.FieldType
+import com.github.wwkarev.sharktask.core.models.FieldValueModel
+import com.github.wwkarev.sharktask.core.models.TaskModel
+import com.github.wwkarev.sharktask.core.project.Project
+import com.github.wwkarev.sharktask.core.status.Status
+import com.github.wwkarev.sharktask.core.tasktype.TaskType
+import com.github.wwkarev.sharktask.core.user.UserManager
+import groovy.json.JsonSlurper
 import groovy.sql.Sql
 
-class Task implements API_Task {
+abstract class Task implements API_Task {
     protected Sql sql
-    protected DBTableNames dbTableNames
-    protected Long id
-    protected String key
-    protected API_Project project
-    protected API_TaskType taskType
-    protected API_Status status
-    protected String summary
-    protected API_User creator
-    protected API_User assignee
-    protected Date createdDate
+    protected Config config
+    protected TaskModel taskModel
 
-    Task(Sql sql, DBTableNames dbTableNames, Long id, Project project, TaskType taskType, Status status, String summary, User creator, User assignee, Date createdDate) {
+    Task(Sql sql, Config config, TaskModel taskModel) {
         this.sql = sql
-        this.dbTableNames = dbTableNames
-        this.id = id
-        this.key = "${project.getKey()}-$id"
-        this.project = project
-        this.taskType = taskType
-        this.status = status
-        this.summary = summary
-        this.creator = creator
-        this.assignee = assignee
-        this.createdDate = createdDate
+        this.config = config
+        this.taskModel = taskModel
     }
 
     @Override
     Long getId() {
-        return id
+        return taskModel.id
     }
 
     @Override
     String getKey() {
-        return key
+        return taskModel.getProjectModel().key + "-" + taskModel.id
     }
 
     @Override
-    API_Project getProject() {
-        return project
+    Project getProject() {
+        return new Project(taskModel.getProjectModel())
     }
 
     @Override
-    API_TaskType getTaskType() {
-        return taskType
+    TaskType getTaskType() {
+        return new TaskType(taskModel.getTaskTypeModel())
     }
 
     @Override
-    API_Status getStatus() {
-        return status
+    Status getStatus() {
+        return new Status(taskModel.getStatusModel())
     }
 
     @Override
     String getSummary() {
-        return summary
+        return _getFieldValue(config.getSummaryFieldId())
     }
 
     @Override
     API_User getCreator() {
-        return creator
+        return getFieldValue(config.getCreatorFieldId())
     }
 
     @Override
     API_User getAssignee() {
-        return assignee
+        return getFieldValue(config.getAssigneeFieldId())
     }
 
     @Override
     Date getCreatedDate() {
-        return createdDate
+        return taskModel.created
     }
 
     @Override
     Object getFieldValue(Long fieldId) {
-        String valueType = FieldAccessor.getInstance(sql, dbTableNames).getById(fieldId).getValueType()
-        GroovyRowResult rowResult = sql.rows((
-                "select * from ${dbTableNames.getFieldValueTable()} where task_id = $id and field_id = $fieldId"
-        ).toString())[0]
-        def value
-        switch (valueType) {
-            case Field.ValueType.TEXT:
-                value = rowResult?.text_value
-                break
-            case Field.ValueType.DATE:
-                value = rowResult?.date_value
-                break
-            case Field.ValueType.NUMBER:
-                value = rowResult?.number_value
-                break
+        try {
+            return _getFieldValue(fieldId)
+        } catch (RecordNotFoundException e) {
+            return null
         }
-        return value
     }
 
     @Override
@@ -123,11 +97,37 @@ class Task implements API_Task {
 
     @Override
     List<API_Attachment> getAttachments() {
-        throw new MethodNotImplementedException()
+        return Select.filter(sql, config.getAttachmentModel(), 'taskId', id).collect{new Attachment(it)}
     }
 
     @Override
     List<API_Comment> getComments() {
         throw new MethodNotImplementedException()
+    }
+
+    private Object _getFieldValue(Long fieldId) {
+        FieldValueModel fieldValueModel = Select.get(
+                sql, config.getFieldValueModel(), new Q([taskId: taskModel.id, fieldId: fieldId])
+        )
+        def value
+            switch (FieldType.fromString(fieldValueModel.getFieldModel().type)) {
+                case FieldType.TEXT:
+                    value = fieldValueModel.textValue
+                    break
+                case FieldType.NUMBER:
+                    value = fieldValueModel.numberValue
+                    break
+                case FieldType.DATE:
+                    value = fieldValueModel.dateValue
+                    break
+                case FieldType.USER:
+                    String userKey = fieldValueModel.textValue
+                    value = userKey ? UserManager.newInstance(sql, config).getByKey(userKey) : null
+                    break
+                case FieldType.JSON:
+                    value = new JsonSlurper().parseText(fieldValueModel.textValue)
+                    break
+        }
+        return value
     }
 }

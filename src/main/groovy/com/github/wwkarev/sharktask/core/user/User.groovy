@@ -1,42 +1,36 @@
 package com.github.wwkarev.sharktask.core.user
 import com.github.wwkarev.sharktask.api.user.User as API_User
-class User implements API_User {
-    private Long id
-    private String key
-    private String firstName
-    private String lastName
-    private String fullName
+import com.github.wwkarev.sharktask.core.models.UserModel
 
-    User(Long id, String key, String firstName, String lastName, String fullName) {
-        this.id = id
-        this.key = key
-        this.firstName = firstName
-        this.lastName = lastName
-        this.fullName = fullName
+final class User implements API_User {
+    private UserModel userModel
+
+    User(UserModel userModel) {
+        this.userModel = userModel
     }
 
     @Override
     Long getId() {
-        return id
+        return userModel.id
     }
 
     @Override
     String getKey() {
-        return key
+        return userModel.key
     }
 
     @Override
     String getFirstName() {
-        return firstName
+        return userModel.firstName
     }
 
     @Override
     String getLastName() {
-        return lastName
+        return userModel.lastName
     }
 
     @Override
     String getFullName() {
-        return fullName
+        return userModel.fullName
     }
 }

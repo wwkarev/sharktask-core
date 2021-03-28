@@ -1,40 +1,34 @@
 package com.github.wwkarev.sharktask.core.task
 
+import com.github.wwkarev.gorm.Q
+import com.github.wwkarev.gorm.Select
+import com.github.wwkarev.gorm.exceptions.RecordNotFoundException
 import com.github.wwkarev.sharktask.api.eventdispatchoption.EventDispatchOption
-import com.github.wwkarev.sharktask.api.project.Project as API_Project
-import com.github.wwkarev.sharktask.api.status.Status as API_Status
 import com.github.wwkarev.sharktask.api.task.MutableTask as API_MutableTask
-import com.github.wwkarev.sharktask.api.tasktype.TaskType as API_TaskType
 import com.github.wwkarev.sharktask.api.user.User as API_User
-import com.github.wwkarev.sharktask.core.config.DBTableNames
+import com.github.wwkarev.sharktask.core.config.Config
 import com.github.wwkarev.sharktask.core.exception.MethodNotImplementedException
-import com.github.wwkarev.sharktask.core.field.Field
-import com.github.wwkarev.sharktask.core.field.FieldAccessor
-import groovy.sql.GroovyRowResult
+import com.github.wwkarev.sharktask.core.field.FieldType
+import com.github.wwkarev.sharktask.core.models.AttachmentModel
+import com.github.wwkarev.sharktask.core.models.FieldModel
+import com.github.wwkarev.sharktask.core.models.FieldValueModel
+import com.github.wwkarev.sharktask.core.models.TaskModel
+import com.github.wwkarev.sharktask.core.user.User
+import groovy.json.JsonBuilder
 import groovy.sql.Sql
 
-class MutableTask extends Task implements API_MutableTask {
-    MutableTask(Sql sql, DBTableNames dbTableNames, Long id, API_Project project, API_TaskType taskType, API_Status status, String summary, API_User creator, API_User assignee, Date createdDate) {
-        super(sql, dbTableNames, id, project, taskType, status, summary, creator, assignee, createdDate)
+final class MutableTask extends Task implements API_MutableTask {
+    MutableTask(Sql sql, Config models, TaskModel taskModel) {
+        super(sql, models, taskModel)
     }
 
     @Override
-    void updateValue(Long fieldId, value, API_User user, EventDispatchOption eventDispatchOption) {
-        value = transformValue(value)
-        String valueColumnName = getValueColumnName(fieldId)
-        GroovyRowResult fieldValueRowResult =  sql.rows((
-                "select * from ${dbTableNames.getFieldValueTable()} where task_id = $id and field_id = $fieldId"
-        ).toString())[0]
-        if (fieldValueRowResult) {
-            sql.execute((
-                    "update ${dbTableNames.getFieldValueTable()} set $valueColumnName = ? " +
-                            "where id = ?").toString()
-                    , [value, fieldValueRowResult.id])
-        } else {
-            sql.execute((
-                    "insert into ${dbTableNames.getFieldValueTable()} " +
-                            "(task_id, field_id, $valueColumnName) VALUES($id, $fieldId, ?)").toString()
-                    , [value])
+    void updateFieldValue(Long fieldId, value, API_User user, EventDispatchOption eventDispatchOption = EventDispatchOption.DO_NOT_DISPATCH) {
+        FieldModel fieldModel = Select.get(sql, config.getFieldModel(), 'id', fieldId)
+        try {
+            _updateFieldValue(fieldModel, value, user, eventDispatchOption)
+        } catch(RecordNotFoundException e) {
+            insertFieldValue(fieldModel, value, user, eventDispatchOption)
         }
     }
 
@@ -60,7 +54,20 @@ class MutableTask extends Task implements API_MutableTask {
 
     @Override
     void addAttachment(String filePath, String attachmentName, API_User user, EventDispatchOption eventDispatchOption) {
-        throw new MethodNotImplementedException()
+        File file = new File(filePath)
+        if (!file.exists() || file.isDirectory()) {
+            throw new FileNotFoundException(filePath)
+        }
+
+        AttachmentModel fieldValueModel = config.getAttachmentModel()
+                .getDeclaredConstructor(Sql, String, String, Long)
+                .newInstance(sql, filePath, attachmentName, id)
+        .insert()
+    }
+
+    @Override
+    void removeAttachment(Long id, API_User user, EventDispatchOption eventDispatchOption) {
+        Select.get(sql, config.getAttachmentModel(), 'id', id).delete()
     }
 
     @Override
@@ -69,34 +76,48 @@ class MutableTask extends Task implements API_MutableTask {
     }
 
     @Override
+    void removeComment(Long aLong, API_User user, EventDispatchOption eventDispatchOption) {
+        throw new MethodNotImplementedException()
+    }
+
+    @Override
     void delete(API_User user) {
         throw new MethodNotImplementedException()
     }
 
-    private String getValueColumnName(Long fieldId) {
-        String valueType = FieldAccessor.getInstance(sql, dbTableNames).getById(fieldId).getValueType()
-        String valueColumnName = null
-        switch (valueType) {
-            case Field.ValueType.TEXT:
-                valueColumnName = 'text_value'
-                break
-            case Field.ValueType.DATE:
-                valueColumnName = 'date_value'
-                break
-            case Field.ValueType.NUMBER:
-                valueColumnName = 'number_value'
-                break
-        }
-        if (!valueColumnName) {
-            throw new IllegalArgumentException("Value type not supported: $valueType")
-        }
-        return valueColumnName
+    private _updateFieldValue(FieldModel fieldModel, value, API_User user, EventDispatchOption eventDispatchOption) {
+        FieldValueModel fieldValueModel = Select.get(
+                sql, config.getFieldValueModel(), new Q([taskId: taskModel.id, fieldId: fieldModel.id])
+        )
+        setValueToFieldValueModel(fieldValueModel, value, FieldType.fromString(fieldModel.type))
+        fieldValueModel.update()
     }
 
-    private def transformValue(value) {
-        if (value instanceof Date) {
-            value = ((Date)value).toTimestamp()
+    private insertFieldValue(FieldModel fieldModel, value, API_User user, EventDispatchOption eventDispatchOption) {
+        FieldValueModel fieldValueModel = config.getFieldValueModel()
+                .getDeclaredConstructor(Sql, Long, Long, String, Double, Date)
+                .newInstance(sql, taskModel.id, fieldModel.id, null, null, null)
+        setValueToFieldValueModel(fieldValueModel, value, FieldType.fromString(fieldModel.type))
+        fieldValueModel.insert()
+    }
+
+    private void setValueToFieldValueModel(FieldValueModel fieldValueModel, Object value, FieldType fieldType) {
+        switch (fieldType) {
+            case FieldType.TEXT:
+                fieldValueModel.textValue = value
+                break
+            case FieldType.NUMBER:
+                fieldValueModel.numberValue = value
+                break
+            case FieldType.DATE:
+                fieldValueModel.dateValue = value
+                break
+            case FieldType.USER:
+                fieldValueModel.textValue = ((User)value)?.getKey()
+                break
+            case FieldType.JSON:
+                fieldValueModel.textValue = new JsonBuilder(value).toString()
+                break
         }
-        return value
     }
 }

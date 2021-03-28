@@ -1,30 +1,27 @@
 package com.github.wwkarev.sharktask.core.attachment
 
 import com.github.wwkarev.sharktask.api.attachment.Attachment as API_Attachment
+import com.github.wwkarev.sharktask.core.models.AttachmentModel
 
 final class Attachment implements API_Attachment {
-    private Long id
-    private String name
-    private File file
+    private AttachmentModel attachmentModel
 
-    Attachment(Long id, String name, File file) {
-        this.id = id
-        this.name = name
-        this.file = file
+    Attachment(AttachmentModel attachmentModel) {
+        this.attachmentModel = attachmentModel
     }
 
     @Override
     Long getId() {
-        return id
+        return attachmentModel.id
     }
 
     @Override
     String getName() {
-        return name
+        return attachmentModel.name
     }
 
     @Override
     File getFile() {
-        return file
+        return new File(attachmentModel.filePath)
     }
 }

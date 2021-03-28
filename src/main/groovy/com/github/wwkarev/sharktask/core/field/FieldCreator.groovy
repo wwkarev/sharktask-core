@@ -1,32 +1,43 @@
 package com.github.wwkarev.sharktask.core.field
 
 import com.github.wwkarev.sharktask.api.field.FieldCreator as API_FieldCreator
-import com.github.wwkarev.sharktask.core.config.DBTableNames
+import com.github.wwkarev.sharktask.api.params.ParamNotFoundException
+import com.github.wwkarev.sharktask.api.params.Params
+import com.github.wwkarev.sharktask.api.params.RequiredInParamException
+import com.github.wwkarev.sharktask.core.config.Config
+
+import com.github.wwkarev.sharktask.core.models.FieldModel
+import com.github.wwkarev.sharktask.core.params.ParamId
 import groovy.sql.Sql
 
-class FieldCreator implements API_FieldCreator {
-    private Sql sql
-    private DBTableNames dbTableNames
-    private String name
-    private String valueType
+trait FieldCreator implements API_FieldCreator {
+    abstract Sql getSql()
+    abstract Config getConfig()
 
-    private FieldCreator(Sql sql, DBTableNames dbTableNames, String name, String valueType) {
-        this.sql = sql
-        this.dbTableNames = dbTableNames
-        this.name = name
-        this.valueType = valueType
-    }
-
-    static FieldCreator getInstance(Sql sql, DBTableNames dBTableNames, String name, String valueType) {
-        return new FieldCreator(sql, dBTableNames, name, valueType)
+    @Override
+    Field create(Long id,String name, Params params) {
+        try {
+            _create(id, name, params)
+        } catch (ParamNotFoundException e) {
+            throw new RequiredInParamException()
+        }
     }
 
     @Override
-    Field create() {
-        Long id = sql.executeInsert(
-                "insert into ${dbTableNames.getFieldTable()} (name, value_type) VALUES(?, ?)".toString(),
-                [name, valueType]
-        )[0][0]
-        return new Field(id, name, valueType)
+    Field create(String name, Params params) {
+        try {
+            _create(null, name, params)
+        } catch (ParamNotFoundException e) {
+            throw new RequiredInParamException()
+        }
+    }
+
+    private _create(Long id, String name, Params params) {
+        FieldType type = params.get(ParamId.FIELD_TYPE)
+        FieldModel fieldModel = getConfig().getFieldModel()
+                .getDeclaredConstructor(Sql, Long, String, String)
+                .newInstance(getSql(), id, name, type.toString())
+                .insert()
+        return new Field(fieldModel)
     }
 }

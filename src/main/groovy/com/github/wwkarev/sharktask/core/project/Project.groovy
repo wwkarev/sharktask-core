@@ -1,30 +1,27 @@
 package com.github.wwkarev.sharktask.core.project
 
 import com.github.wwkarev.sharktask.api.project.Project as API_Project
+import com.github.wwkarev.sharktask.core.models.ProjectModel
 
 final class Project implements API_Project {
-    private Long id
-    private String key
-    private String name
+    private ProjectModel projectModel
 
-    Project(Long id, String key, String name) {
-        this.id = id
-        this.key = key
-        this.name = name
+    Project(ProjectModel projectModel) {
+        this.projectModel = projectModel
     }
 
     @Override
     Long getId() {
-        return id
+        return projectModel.id
     }
 
     @Override
     String getKey() {
-        return key
+        return projectModel.key
     }
 
     @Override
     String getName() {
-        return name
+        return projectModel.name
     }
 }

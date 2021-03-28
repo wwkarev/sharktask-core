@@ -1,29 +1,31 @@
 package com.github.wwkarev.sharktask.core.status
 
-import com.github.wwkarev.sharktask.core.config.DBTableNames
+import com.github.wwkarev.gorm.Select
+import com.github.wwkarev.gorm.exceptions.RecordNotFoundException
+import com.github.wwkarev.sharktask.api.status.StatusAccessor as API_StatusAccessor
+import com.github.wwkarev.sharktask.api.status.StatusNotFoundException
+import com.github.wwkarev.sharktask.core.config.Config
 import groovy.sql.Sql
 
-import com.github.wwkarev.sharktask.api.status.StatusAccessor as API_StatusAccessor
-
-class StatusAccessor implements API_StatusAccessor {
-    private Sql sql
-    private DBTableNames dbTableNames
-
-    private StatusAccessor(Sql sql, DBTableNames dbTableNames) {
-        this.sql = sql
-        this.dbTableNames = dbTableNames
-    }
-
-    static StatusAccessor getInstance(Sql sql, DBTableNames dbTable) {
-        return new StatusAccessor(sql, dbTable)
-    }
+trait StatusAccessor implements API_StatusAccessor {
+    abstract Sql getSql()
+    abstract Config getConfig()
 
     @Override
     Status getById(Long id) {
-        def rowResult = sql.rows(
-                "select * from ${dbTableNames.getStatusTable()} where id = ?".toString(),
-                [id]
-        )[0]
-        return new Status(rowResult.id, rowResult.name)
+        try {
+            return new Status(Select.get(getSql(), getConfig().getStatusModel(), 'id', id))
+        } catch(RecordNotFoundException e) {
+            throw new StatusNotFoundException()
+        }
+    }
+
+    @Override
+    Status getAtById(Long id) {
+        try {
+            return new Status(Select.get(getSql(), getConfig().getStatusModel(), 'id', id))
+        } catch(RecordNotFoundException e) {
+            return null
+        }
     }
 }

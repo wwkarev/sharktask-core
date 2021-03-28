@@ -1,28 +1,31 @@
 package com.github.wwkarev.sharktask.core.tasktype
 
+import com.github.wwkarev.gorm.Select
+import com.github.wwkarev.gorm.exceptions.RecordNotFoundException
 import com.github.wwkarev.sharktask.api.tasktype.TaskTypeAccessor as API_TaskTypeAccessor
-import com.github.wwkarev.sharktask.core.config.DBTableNames
+import com.github.wwkarev.sharktask.api.tasktype.TaskTypeNotFoundException
+import com.github.wwkarev.sharktask.core.config.Config
 import groovy.sql.Sql
 
-class TaskTypeAccessor implements API_TaskTypeAccessor {
-    private Sql sql
-    private DBTableNames dbTableNames
-
-    private TaskTypeAccessor(Sql sql, DBTableNames dbTableNames) {
-        this.sql = sql
-        this.dbTableNames = dbTableNames
-    }
-
-    static TaskTypeAccessor getInstance(Sql sql, DBTableNames dbTable) {
-        return new TaskTypeAccessor(sql, dbTable)
-    }
+trait TaskTypeAccessor implements API_TaskTypeAccessor {
+    abstract Sql getSql()
+    abstract Config getConfig()
 
     @Override
     TaskType getById(Long id) {
-        def rowResult = sql.rows(
-                "select * from ${dbTableNames.getTaskTypeTable()} where id = ?".toString(),
-                [id]
-        )[0]
-        return new TaskType(rowResult.id, rowResult.name)
+        try {
+            return new TaskType(Select.get(getSql(), getConfig().getTaskTypeModel(), 'id', id))
+        } catch(RecordNotFoundException e) {
+            throw new TaskTypeNotFoundException()
+        }
+    }
+
+    @Override
+    TaskType getAtById(Long id) {
+        try {
+            return new TaskType(Select.get(getSql(), getConfig().getTaskTypeModel(), 'id', id))
+        } catch(RecordNotFoundException e) {
+            return null
+        }
     }
 }
